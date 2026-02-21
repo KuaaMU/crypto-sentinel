@@ -1,0 +1,13 @@
+services:
+  sentinel:
+    build: .
+    container_name: crypto-sentinel
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./config.yaml:/app/config.yaml:ro
+      - ./.env:/app/.env:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "5000:5000"  # Dashboard
