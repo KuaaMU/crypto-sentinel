@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Past Backtests - Crypto Sentinel{% endblock %}
+
+{% block content %}
+<h2 style="color: #58a6ff; margin-bottom: 20px;">Past Backtests</h2>
+
+<div class="section">
+  {% if runs %}
+  <div style="overflow-x: auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Pair</th>
+          <th>Timeframe</th>
+          <th>Period</th>
+          <th>Return %</th>
+          <th>Sharpe</th>
+          <th>Win Rate</th>
+          <th>Trades</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in runs %}
+        <tr style="cursor: pointer;" onclick="window.location.href='/backtest/{{ run.id }}'">
+          <td>{{ run.created_at[:19] if run.created_at else '-' }}</td>
+          <td><strong>{{ run.pair }}</strong></td>
+          <td>{{ run.timeframe }}</td>
+          <td>{{ run.start_date }} - {{ run.end_date }}</td>
+          <td class="{{ 'positive' if run.return_pct >= 0 else 'negative' }}">
+            {{ '%.2f'|format(run.return_pct) }}%
+          </td>
+          <td class="{{ 'positive' if run.sharpe >= 1 else ('neutral' if run.sharpe >= 0 else 'negative') }}">
+            {{ '%.2f'|format(run.sharpe) }}
+          </td>
+          <td class="{{ 'positive' if run.win_rate >= 50 else 'negative' }}">
+            {{ '%.1f'|format(run.win_rate) }}%
+          </td>
+          <td>{{ run.total_trades }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty">No backtest runs yet. Go to <a href="/backtest" style="color: #58a6ff;">Backtest</a> to run your first one.</p>
+  {% endif %}
+</div>
+{% endblock %}

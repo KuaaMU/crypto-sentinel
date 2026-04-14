@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Crypto Sentinel{% endblock %}
+
+{% block content %}
+<!-- KPI Cards -->
+<div class="grid">
+  <div class="card">
+    <h3>Today's PnL</h3>
+    <div class="value {{ 'positive' if daily_pnl >= 0 else 'negative' }}">
+      {{ '%.2f'|format(daily_pnl) }} USDT
+    </div>
+  </div>
+  <div class="card">
+    <h3>Trade Count</h3>
+    <div class="value">{{ trade_count }}</div>
+  </div>
+  <div class="card">
+    <h3>Open Positions</h3>
+    <div class="value">{{ open_positions|length }}</div>
+  </div>
+  <div class="card">
+    <h3>Active Signals</h3>
+    <div class="value">{{ signals|length }}</div>
+  </div>
+</div>
+
+<!-- Equity Curve -->
+<div class="section">
+  <h2>Equity Curve</h2>
+  <div id="equity-chart" style="height: 300px;"></div>
+</div>
+
+<!-- Open Positions -->
+<div class="section">
+  <h2>Open Positions</h2>
+  {% if open_positions %}
+  <table>
+    <thead>
+      <tr>
+        <th>Pair</th>
+        <th>Direction</th>
+        <th>Entry Price</th>
+        <th>Size</th>
+        <th>Leverage</th>
+        <th>Conviction</th>
+        <th>Stop Loss</th>
+        <th>Status</th>
+        <th>Opened</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in open_positions %}
+      <tr>
+        <td><strong>{{ p.pair }}</strong></td>
+        <td><span class="badge badge-{{ p.direction }}">{{ p.direction|upper }}</span></td>
+        <td>{{ '%.4f'|format(p.entry_price) }}</td>
+        <td>{{ '%.4f'|format(p.size) }}</td>
+        <td>{{ p.leverage }}x</td>
+        <td>{{ '%.2f'|format(p.conviction) }}</td>
+        <td>{{ '%.4f'|format(p.stop_loss) }}</td>
+        <td><span class="badge badge-{{ 'open' if p.status == 'open' else 'partial' }}">{{ p.status }}</span></td>
+        <td>{{ p.opened_at[:19] }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No open positions</p>
+  {% endif %}
+</div>
+
+<!-- Recent Signals -->
+<div class="section">
+  <h2>Recent Signals (Last 10)</h2>
+  {% if signals %}
+  <table>
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Pair</th>
+        <th>Sentiment</th>
+        <th>Whale</th>
+        <th>Technical</th>
+        <th>Conviction</th>
+        <th>Direction</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in signals[:10] %}
+      <tr>
+        <td>{{ s.timestamp[:19] }}</td>
+        <td><strong>{{ s.pair }}</strong></td>
+        <td>{{ '%.1f'|format(s.sentiment_score) }}</td>
+        <td>{{ '%.1f'|format(s.whale_score) }}</td>
+        <td>{{ '%.1f'|format(s.technical_score) }}</td>
+        <td class="{{ 'positive' if s.conviction >= 0.65 else ('neutral' if s.conviction >= 0.4 else 'negative') }}">
+          {{ '%.3f'|format(s.conviction) }}
+        </td>
+        <td><span class="badge badge-{{ s.direction }}">{{ s.direction }}</span></td>
+        <td><span class="badge badge-{{ s.action }}">{{ s.action }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No signals recorded yet. Start the trading engine first.</p>
+  {% endif %}
+</div>
+
+<p class="timestamp">Last updated: {{ now }} | Auto-refresh every 30s</p>
+
+<!-- Auto-refresh -->
+<script>setTimeout(() => location.reload(), 30000)</script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const chartContainer = document.getElementById('equity-chart');
+  if (!chartContainer || typeof LightweightCharts === 'undefined') return;
+
+  const chart = LightweightCharts.createChart(chartContainer, {
+    layout: {
+      background: { color: '#161b22' },
+      textColor: '#8b949e',
+    },
+    grid: {
+      vertLines: { color: '#21262d' },
+      horzLines: { color: '#21262d' },
+    },
+    width: chartContainer.clientWidth,
+    height: 300,
+    timeScale: {
+      borderColor: '#30363d',
+      timeVisible: true,
+    },
+    rightPriceScale: {
+      borderColor: '#30363d',
+    },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+    },
+  });
+
+  const lineSeries = chart.addLineSeries({
+    color: '#58a6ff',
+    lineWidth: 2,
+    crosshairMarkerRadius: 4,
+    crosshairMarkerBorderColor: '#58a6ff',
+    crosshairMarkerBackgroundColor: '#0d1117',
+  });
+
+  fetch('/api/daily-pnl')
+    .then(r => r.json())
+    .then(data => {
+      if (data && data.length > 0) {
+        const chartData = data.map(d => ({
+          time: d.date,
+          value: d.cumulative_pnl,
+        }));
+        lineSeries.setData(chartData);
+        chart.timeScale().fitContent();
+      }
+    })
+    .catch(err => console.error('Failed to load equity data:', err));
+
+  window.addEventListener('resize', () => {
+    chart.applyOptions({ width: chartContainer.clientWidth });
+  });
+})();
+</script>
+{% endblock %}

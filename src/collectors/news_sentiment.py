@@ -18,9 +18,10 @@ def _make_connector() -> aiohttp.TCPConnector:
 class NewsSentimentCollector(BaseCollector):
     """Collects crypto news sentiment. Uses CoinGecko trending + simple heuristics."""
 
-    def __init__(self, coingecko_base: str, news_api_key: str = ""):
+    def __init__(self, coingecko_base: str, news_api_key: str = "", proxy: str = ""):
         self._coingecko_base = coingecko_base
         self._news_api_key = news_api_key
+        self._proxy = proxy
 
     async def collect(self) -> dict:
         try:
@@ -57,7 +58,7 @@ class NewsSentimentCollector(BaseCollector):
         url = f"{self._coingecko_base}/search/trending"
         try:
             async with aiohttp.ClientSession(connector=_make_connector()) as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                async with session.get(url, proxy=self._proxy or None, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                     if resp.status != 200:
                         return []
                     data = await resp.json()
@@ -69,7 +70,7 @@ class NewsSentimentCollector(BaseCollector):
         url = f"{self._coingecko_base}/global"
         try:
             async with aiohttp.ClientSession(connector=_make_connector()) as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                async with session.get(url, proxy=self._proxy or None, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                     if resp.status != 200:
                         return {}
                     data = await resp.json()
@@ -86,7 +87,7 @@ class NewsSentimentCollector(BaseCollector):
         try:
             async with aiohttp.ClientSession(connector=_make_connector()) as session:
                 url = f"{self._coingecko_base}/ping"
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                async with session.get(url, proxy=self._proxy or None, timeout=aiohttp.ClientTimeout(total=5)) as resp:
                     return resp.status == 200
         except Exception:
             return False

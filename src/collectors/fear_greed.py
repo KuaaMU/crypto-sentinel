@@ -20,13 +20,14 @@ def _make_tcp_connector() -> aiohttp.TCPConnector:
 class FearGreedCollector(BaseCollector):
     """Collects Crypto Fear & Greed Index from alternative.me (free, no key needed)."""
 
-    def __init__(self, url: str = "https://api.alternative.me/fng/"):
+    def __init__(self, url: str = "https://api.alternative.me/fng/", proxy: str = ""):
         self._url = url
+        self._proxy = proxy
 
     async def collect(self) -> FearGreedData | None:
         try:
             async with aiohttp.ClientSession(connector=_make_tcp_connector()) as session:
-                async with session.get(self._url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                async with session.get(self._url, proxy=self._proxy or None, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                     if resp.status != 200:
                         logger.warning("Fear&Greed API returned status %d", resp.status)
                         return None
@@ -45,7 +46,7 @@ class FearGreedCollector(BaseCollector):
     async def health_check(self) -> bool:
         try:
             async with aiohttp.ClientSession(connector=_make_tcp_connector()) as session:
-                async with session.get(self._url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                async with session.get(self._url, proxy=self._proxy or None, timeout=aiohttp.ClientTimeout(total=5)) as resp:
                     return resp.status == 200
         except Exception:
             return False

@@ -30,7 +30,7 @@ from src.execution.order_manager import open_position, close_position
 from src.execution.exit_manager import ExitManager, calculate_stop_loss, calculate_tp_prices, calculate_atr
 from src.storage.database import (
     init_db, save_trade, save_signal, get_daily_pnl,
-    update_daily_pnl,
+    update_daily_pnl, save_collector_snapshot, save_ohlcv_cache,
 )
 from src.models import Position, PositionStatus
 
@@ -57,15 +57,17 @@ class CryptoSentinel:
             max_hold_minutes=config.trading.max_hold_minutes,
         )
         # Collectors
-        self._fear_greed = FearGreedCollector(config.collectors.fear_greed_url)
+        self._fear_greed = FearGreedCollector(config.collectors.fear_greed_url, proxy=config.collectors.proxy)
         self._news = NewsSentimentCollector(
             config.collectors.coingecko_base,
             config.collectors.crypto_news_api_key,
+            proxy=config.collectors.proxy,
         )
         self._whale = WhaleTracker(
             config.collectors.etherscan_api_key,
             config.collectors.etherscan_base,
             config.collectors.min_whale_tx_usd,
+            proxy=config.collectors.proxy,
         )
         self._price_collector = None
         self._orderbook_collector = None
@@ -78,10 +80,16 @@ class CryptoSentinel:
         logger.info("Pairs: %s", ", ".join(self._config.exchange.pairs))
         logger.info("Leverage: %dx-%dx", self._config.trading.base_leverage, self._config.trading.max_leverage)
         logger.info("Entry threshold: %.2f", self._config.trading.entry_conviction_threshold)
+        if self._config.exchange.proxy:
+            logger.info("Proxy: %s", self._config.exchange.proxy)
         logger.info("=" * 60)
 
         await init_db()
-        self._exchange = await create_exchange(self._config.exchange)
+        self._exchange = await create_exchange(
+            self._config.exchange,
+            trading_mode=self._config.trading_mode,
+            dry_run_balance=10000.0,
+        )
         self._price_collector = PriceCollector(self._exchange, self._config.exchange.pairs)
         self._orderbook_collector = OrderbookCollector(self._exchange, self._config.exchange.pairs)
 
@@ -216,6 +224,67 @@ class CryptoSentinel:
             if position:
                 self._positions.append(position)
                 await save_trade(position)
+
+        # Record collector data for future backtests
+        await self._record_collector_data(fg_data, news_data, whale_txs, prices, orderbooks)
+
+    async def _record_collector_data(
+        self,
+        fg_data,
+        news_data,
+        whale_txs,
+        prices: dict,
+        orderbooks: dict,
+    ) -> None:
+        """Record collector data for future backtests. Non-blocking."""
+        try:
+            # Extract values
+            fear_greed_value = fg_data.value if fg_data else None
+            fear_greed_class = fg_data.classification if fg_data else None
+
+            # News sentiment score
+            news_sentiment = news_data.get("sentiment_score") if isinstance(news_data, dict) else None
+
+            # Whale score (count of whale txs as simple metric)
+            whale_score_val = len(whale_txs) if whale_txs else 0
+
+            # Prices
+            btc_price = prices.get("BTC/USDT:USDT", None)
+            btc_price_val = btc_price.price if btc_price else None
+            eth_price = prices.get("ETH/USDT:USDT", None)
+            eth_price_val = eth_price.price if eth_price else None
+
+            # Market data snapshot
+            market_data = {}
+            for pair, snapshot in prices.items():
+                market_data[pair] = {
+                    "price": snapshot.price,
+                    "volume_24h": snapshot.volume_24h,
+                    "change_24h_pct": snapshot.change_24h_pct,
+                }
+
+            await save_collector_snapshot(
+                fear_greed_value=fear_greed_value,
+                fear_greed_class=fear_greed_class,
+                news_sentiment=news_sentiment,
+                whale_score=float(whale_score_val),
+                btc_price=btc_price_val,
+                eth_price=eth_price_val,
+                market_data=market_data,
+            )
+
+            # Cache OHLCV data for each pair
+            for pair in self._config.exchange.pairs:
+                try:
+                    ohlcv = await self._price_collector.fetch_ohlcv(pair, "5m", 100)
+                    if ohlcv:
+                        await save_ohlcv_cache(pair, "5m", ohlcv)
+                except Exception as e:
+                    logger.warning("Failed to cache OHLCV for %s: %s", pair, e)
+
+            logger.debug("Collector data recorded")
+        except Exception as e:
+            logger.warning("Failed to record collector data: %s", e)
 
     async def _manage_positions(self, prices: dict, orderbooks: dict) -> None:
         """Check and manage all open positions."""

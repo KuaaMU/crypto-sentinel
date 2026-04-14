@@ -1,6 +1,6 @@
 exchange:
   name: okx
-  sandbox: true  # OKX demo trading
+  sandbox: false  # Real market data (dry-run mode handles order simulation)
   pairs:
     - BTC/USDT:USDT
     - SOL/USDT:USDT
@@ -13,14 +13,14 @@ trading:
   max_positions: 3
   max_position_pct: 0.30      # 30% of wallet per trade
   daily_loss_limit: -0.05     # -5% circuit breaker
-  entry_conviction_threshold: 0.65
+  entry_conviction_threshold: 0.65  # Optimized: was 0.58, higher selectivity
   exit_conviction_threshold: 0.30
-  max_hold_minutes: 240       # 4 hours
+  max_hold_minutes: 480       # Optimized: 8 hours (was 4h)
 
 scoring_weights:
-  sentiment: 0.35
-  whale: 0.35
-  technical: 0.30
+  sentiment: 0.20
+  whale: 0.20
+  technical: 0.60
 
 exit_strategy:
   partial_tp_levels:
@@ -30,12 +30,12 @@ exit_strategy:
       target: 0.06    # 33% at +6%
     - pct: 0.34
       target: trailing # 34% trailing
-  trailing_atr_multiplier: 1.5
+  trailing_atr_multiplier: 2.5  # Optimized: was 1.5, wider stops
   trailing_atr_period: 14
 
 collectors:
-  interval_seconds: 300       # 5 minutes
+  interval_seconds: 60        # 1 minute - fast enough for 5m candle trading
   fear_greed_url: "https://api.alternative.me/fng/"
   coingecko_base: "https://api.coingecko.com/api/v3"
-  etherscan_base: "https://api.etherscan.io/api"
+  etherscan_base: "https://api.etherscan.io/v2/api"
   min_whale_tx_usd: 1000000   # $1M+ transactions

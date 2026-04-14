@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Crypto Sentinel{% endblock %}</title>
+  <script src="https://unpkg.com/lightweight-charts@4/dist/lightweight-charts.standalone.production.js"></script>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 240px;
+      min-width: 240px;
+      background: #161b22;
+      border-right: 1px solid #30363d;
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      z-index: 100;
+    }
+    .sidebar-brand {
+      padding: 20px 16px;
+      border-bottom: 1px solid #30363d;
+    }
+    .sidebar-brand h1 {
+      font-size: 18px;
+      color: #58a6ff;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .sidebar-brand p {
+      font-size: 11px;
+      color: #484f58;
+      margin-top: 4px;
+    }
+    .sidebar-nav {
+      flex: 1;
+      padding: 12px 0;
+      overflow-y: auto;
+    }
+    .sidebar-nav a {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      color: #8b949e;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: background 0.15s, color 0.15s;
+      border-left: 3px solid transparent;
+    }
+    .sidebar-nav a:hover {
+      background: #1c2128;
+      color: #c9d1d9;
+    }
+    .sidebar-nav a.active {
+      color: #58a6ff;
+      background: #1c2128;
+      border-left-color: #58a6ff;
+    }
+    .sidebar-nav a svg {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      fill: currentColor;
+    }
+    .sidebar-footer {
+      padding: 16px;
+      border-top: 1px solid #30363d;
+      font-size: 11px;
+      color: #484f58;
+      text-align: center;
+    }
+
+    /* ── Main Content ── */
+    .main-content {
+      margin-left: 240px;
+      flex: 1;
+      padding: 24px;
+      min-width: 0;
+    }
+
+    /* ── Common Components ── */
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 20px;
+    }
+    .card h3 {
+      color: #8b949e;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+    .card .value {
+      font-size: 28px;
+      font-weight: 700;
+    }
+    .section {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+    .section h2 {
+      color: #58a6ff;
+      font-size: 18px;
+      margin-bottom: 12px;
+    }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #21262d; font-size: 14px; }
+    th { color: #8b949e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+    tr:hover { background: #1c2128; }
+    .positive { color: #3fb950; }
+    .negative { color: #f85149; }
+    .neutral { color: #d29922; }
+    .accent { color: #58a6ff; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .badge-long { background: #0d3320; color: #3fb950; }
+    .badge-short { background: #3d1114; color: #f85149; }
+    .badge-neutral { background: #3d2e00; color: #d29922; }
+    .badge-enter { background: #0d3320; color: #3fb950; }
+    .badge-exit { background: #3d1114; color: #f85149; }
+    .badge-wait { background: #1c1c1c; color: #8b949e; }
+    .badge-open { background: #0d3320; color: #3fb950; }
+    .badge-closed { background: #1c1c1c; color: #8b949e; }
+    .badge-partial { background: #3d2e00; color: #d29922; }
+    .empty {
+      color: #484f58;
+      font-style: italic;
+      padding: 20px;
+      text-align: center;
+    }
+    .timestamp {
+      color: #484f58;
+      font-size: 12px;
+      text-align: right;
+      margin-top: 16px;
+    }
+
+    /* ── Form Elements ── */
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      color: #8b949e;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    .form-control {
+      width: 100%;
+      padding: 8px 12px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #c9d1d9;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .form-control:focus { border-color: #58a6ff; }
+    select.form-control { cursor: pointer; }
+    .btn {
+      display: inline-block;
+      padding: 10px 20px;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: #238636;
+      color: #fff;
+      border-color: #238636;
+    }
+    .btn-primary:hover { background: #2ea043; }
+    .btn-secondary {
+      background: #21262d;
+      color: #c9d1d9;
+    }
+    .btn-secondary:hover { background: #30363d; }
+
+    /* ── Filter Bar ── */
+    .filter-bar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+      padding: 12px 16px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+    }
+    .filter-bar select {
+      padding: 6px 10px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #c9d1d9;
+      font-size: 13px;
+      cursor: pointer;
+      outline: none;
+    }
+    .filter-bar select:focus { border-color: #58a6ff; }
+    .filter-bar label {
+      font-size: 12px;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-brand">
+      <h1>Crypto Sentinel</h1>
+      <p>Sentiment + Whale Trading</p>
+    </div>
+    <div class="sidebar-nav">
+      <a href="/" class="{% if request.path == '/' %}active{% endif %}">
+        <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+        Dashboard
+      </a>
+      <a href="/live/BTC-USDT:USDT" class="{% if request.path.startswith('/live') %}active{% endif %}">
+        <svg viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+        Live Chart
+      </a>
+      <a href="/backtest" class="{% if request.path == '/backtest' %}active{% endif %}">
+        <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H5v-2h7v2zm5-4H5v-2h12v2zm0-4H5V7h12v2z"/></svg>
+        Backtest
+      </a>
+      <a href="/backtests" class="{% if request.path == '/backtests' %}active{% endif %}">
+        <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z"/></svg>
+        Past Backtests
+      </a>
+      <a href="/trades" class="{% if request.path == '/trades' %}active{% endif %}">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm0-4h-2V7h2v8z"/></svg>
+        Trades
+      </a>
+      <a href="/signals" class="{% if request.path == '/signals' %}active{% endif %}">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM1 12C1 5.93 5.93 1 12 1s11 4.93 11 11-4.93 11-11 11S1 18.07 1 12zm8.5-1.5c.83 0 1.5-.67 1.5-1.5s-.67-1.5-1.5-1.5S8 8.17 8 9s.67 1.5 1.5 1.5zm5 0c.83 0 1.5-.67 1.5-1.5s-.67-1.5-1.5-1.5-1.5.67-1.5 1.5.67 1.5 1.5 1.5z"/></svg>
+        Signals
+      </a>
+    </div>
+    <div class="sidebar-footer">
+      Crypto Sentinel v2.0
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="/static/js/chart.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

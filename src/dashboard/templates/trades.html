@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Trades - Crypto Sentinel{% endblock %}
+
+{% block content %}
+<h2 style="color: #58a6ff; margin-bottom: 20px;">Trade History</h2>
+
+<!-- Filter Bar -->
+<div class="filter-bar">
+  <label>Pair</label>
+  <select id="filter-pair" onchange="applyFilters()">
+    <option value="">All Pairs</option>
+    {% for p in pairs %}
+    <option value="{{ p }}" {% if request.args.get('pair') == p %}selected{% endif %}>{{ p }}</option>
+    {% endfor %}
+  </select>
+
+  <label>Direction</label>
+  <select id="filter-direction" onchange="applyFilters()">
+    <option value="">All</option>
+    <option value="long" {% if request.args.get('direction') == 'long' %}selected{% endif %}>Long</option>
+    <option value="short" {% if request.args.get('direction') == 'short' %}selected{% endif %}>Short</option>
+  </select>
+
+  <label>Status</label>
+  <select id="filter-status" onchange="applyFilters()">
+    <option value="">All</option>
+    <option value="open" {% if request.args.get('status') == 'open' %}selected{% endif %}>Open</option>
+    <option value="closed" {% if request.args.get('status') == 'closed' %}selected{% endif %}>Closed</option>
+  </select>
+</div>
+
+<!-- Trades Table -->
+<div class="section">
+  {% if trades %}
+  <div style="overflow-x: auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Pair</th>
+          <th>Direction</th>
+          <th>Entry Price</th>
+          <th>Size</th>
+          <th>Leverage</th>
+          <th>Conviction</th>
+          <th>PnL</th>
+          <th>Exit Reason</th>
+          <th>Opened</th>
+          <th>Closed</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in trades %}
+        <tr>
+          <td><strong>{{ t.pair }}</strong></td>
+          <td><span class="badge badge-{{ t.direction }}">{{ t.direction|upper }}</span></td>
+          <td>{{ '%.4f'|format(t.entry_price) }}</td>
+          <td>{{ '%.4f'|format(t.size) }}</td>
+          <td>{{ t.leverage }}x</td>
+          <td>{{ '%.2f'|format(t.conviction) if t.conviction else '-' }}</td>
+          <td class="{{ 'positive' if (t.realized_pnl or 0) >= 0 else 'negative' }}">
+            {% if t.realized_pnl is not none %}
+              {{ '%.2f'|format(t.realized_pnl) }} USDT
+            {% else %}
+              -
+            {% endif %}
+          </td>
+          <td>{{ t.exit_reason or '-' }}</td>
+          <td>{{ t.opened_at[:19] if t.opened_at else '-' }}</td>
+          <td>{{ t.closed_at[:19] if t.closed_at else '-' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty">No trades found matching the selected filters.</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function applyFilters() {
+  const pair = document.getElementById('filter-pair').value;
+  const direction = document.getElementById('filter-direction').value;
+  const status = document.getElementById('filter-status').value;
+
+  const params = new URLSearchParams();
+  if (pair) params.set('pair', pair);
+  if (direction) params.set('direction', direction);
+  if (status) params.set('status', status);
+
+  const qs = params.toString();
+  window.location.href = '/trades' + (qs ? '?' + qs : '');
+}
+</script>
+{% endblock %}

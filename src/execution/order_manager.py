@@ -31,8 +31,12 @@ async def open_position(
     side = "buy" if signal.direction == Direction.LONG else "sell"
 
     try:
-        # Set leverage
-        await exchange.set_leverage(leverage, pair)
+        # Set one-way position mode and leverage
+        try:
+            await exchange.set_position_mode(False, pair)
+        except Exception:
+            pass  # already in net mode
+        await exchange.set_leverage(leverage, pair, params={"mgnMode": "isolated"})
 
         # Get current price for amount calculation
         ticker = await exchange.fetch_ticker(pair)
@@ -54,10 +58,11 @@ async def open_position(
             type="market",
             side=side,
             amount=amount,
+            params={"tdMode": "isolated"},
         )
 
-        fill_price = order.get("average", price)
-        filled_amount = order.get("filled", amount)
+        fill_price = order.get("average") or order.get("price") or price
+        filled_amount = order.get("filled") or amount
 
         position = Position(
             id=str(uuid.uuid4())[:8],
@@ -106,11 +111,11 @@ async def close_position(
             type="market",
             side=side,
             amount=close_amount,
-            params={"reduceOnly": True},
+            params={"reduceOnly": True, "tdMode": "isolated"},
         )
 
-        fill_price = order.get("average", 0)
-        filled = order.get("filled", close_amount)
+        fill_price = order.get("average") or order.get("price") or 0
+        filled = order.get("filled") or close_amount
 
         # Calculate PnL
         if position.direction == Direction.LONG:

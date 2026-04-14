@@ -32,10 +32,11 @@ EXCHANGE_ADDRESSES = {
 class WhaleTracker(BaseCollector):
     """Tracks large ETH transactions via Etherscan API (free, 5 calls/sec)."""
 
-    def __init__(self, api_key: str, base_url: str, min_tx_usd: float = 1_000_000):
+    def __init__(self, api_key: str, base_url: str, min_tx_usd: float = 1_000_000, proxy: str = ""):
         self._api_key = api_key
         self._base_url = base_url
         self._min_tx_usd = min_tx_usd
+        self._proxy = proxy
 
     async def collect(self) -> list[WhaleTransaction]:
         if not self._api_key:
@@ -52,28 +53,34 @@ class WhaleTracker(BaseCollector):
     async def _fetch_large_transactions(self) -> list[WhaleTransaction]:
         """Fetch recent ETH transactions from the latest block."""
         params = {
+            "chainid": "1",
             "module": "proxy",
             "action": "eth_blockNumber",
             "apikey": self._api_key,
         }
         async with aiohttp.ClientSession(connector=_make_connector()) as session:
             # Get latest block number
-            async with session.get(self._base_url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            async with session.get(self._base_url, params=params, proxy=self._proxy or None, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                 data = await resp.json()
-                latest_block = int(data["result"], 16)
+                result = data.get("result", "")
+                if not result or not result.startswith("0x"):
+                    logger.warning("Etherscan returned unexpected result: %s", str(result)[:100])
+                    return []
+                latest_block = int(result, 16)
 
             # Get transactions from recent blocks (last ~5 min = ~25 blocks)
             transactions = []
             for block_offset in range(0, 5):
                 block_num = hex(latest_block - block_offset)
                 block_params = {
+                    "chainid": "1",
                     "module": "proxy",
                     "action": "eth_getBlockByNumber",
                     "tag": block_num,
                     "boolean": "true",
                     "apikey": self._api_key,
                 }
-                async with session.get(self._base_url, params=block_params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                async with session.get(self._base_url, params=block_params, proxy=self._proxy or None, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                     block_data = await resp.json()
 
                 if not block_data.get("result") or not block_data["result"].get("transactions"):
@@ -106,7 +113,7 @@ class WhaleTracker(BaseCollector):
         """Get current ETH price from CoinGecko."""
         url = "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd"
         try:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+            async with session.get(url, proxy=self._proxy or None, timeout=aiohttp.ClientTimeout(total=5)) as resp:
                 data = await resp.json()
                 return data["ethereum"]["usd"]
         except Exception:
@@ -116,9 +123,9 @@ class WhaleTracker(BaseCollector):
         if not self._api_key:
             return False
         try:
-            params = {"module": "proxy", "action": "eth_blockNumber", "apikey": self._api_key}
+            params = {"chainid": "1", "module": "proxy", "action": "eth_blockNumber", "apikey": self._api_key}
             async with aiohttp.ClientSession(connector=_make_connector()) as session:
-                async with session.get(self._base_url, params=params, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                async with session.get(self._base_url, params=params, proxy=self._proxy or None, timeout=aiohttp.ClientTimeout(total=5)) as resp:
                     return resp.status == 200
         except Exception:
             return False

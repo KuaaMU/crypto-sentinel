@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+
+{% block title %}Live Chart - {{ pair }} - Crypto Sentinel{% endblock %}
+
+{% block content %}
+<style>
+  .live-layout {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 16px;
+    height: calc(100vh - 48px);
+    min-height: 600px;
+  }
+  .live-chart-wrapper {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .chart-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px 8px 0 0;
+    flex-wrap: wrap;
+  }
+  .chart-toolbar select {
+    padding: 6px 10px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    color: #c9d1d9;
+    font-size: 13px;
+    cursor: pointer;
+    outline: none;
+  }
+  .chart-toolbar select:focus { border-color: #58a6ff; }
+  .chart-toolbar label {
+    font-size: 12px;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .tf-btn {
+    padding: 5px 10px;
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    color: #8b949e;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .tf-btn:hover { background: #30363d; color: #c9d1d9; }
+  .tf-btn.active { background: #58a6ff; color: #fff; border-color: #58a6ff; }
+  #live-chart {
+    flex: 1;
+    min-height: 500px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+  }
+
+  /* ── Score Panel ── */
+  .score-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .score-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .score-card h4 {
+    font-size: 12px;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+  }
+  .gauge-bar {
+    height: 8px;
+    background: #21262d;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+  .gauge-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+  }
+  .gauge-fill.sentiment { background: linear-gradient(90deg, #f85149, #d29922, #3fb950); }
+  .gauge-fill.whale { background: linear-gradient(90deg, #f85149, #d29922, #58a6ff); }
+  .gauge-fill.technical { background: linear-gradient(90deg, #f85149, #d29922, #a371f7); }
+  .gauge-value {
+    font-size: 13px;
+    color: #c9d1d9;
+    text-align: right;
+    font-weight: 600;
+  }
+  .conviction-display {
+    text-align: center;
+    padding: 20px 16px;
+  }
+  .conviction-number {
+    font-size: 48px;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .conviction-label {
+    font-size: 12px;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .direction-badge {
+    display: inline-block;
+    padding: 6px 20px;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-align: center;
+    width: 100%;
+    margin-top: 8px;
+  }
+  .direction-long { background: #0d3320; color: #3fb950; border: 1px solid #238636; }
+  .direction-short { background: #3d1114; color: #f85149; border: 1px solid #da3633; }
+  .direction-neutral { background: #3d2e00; color: #d29922; border: 1px solid #9e6a03; }
+</style>
+
+<div class="live-layout">
+  <!-- Chart Area -->
+  <div class="live-chart-wrapper">
+    <div class="chart-toolbar">
+      <label>Pair</label>
+      <select id="pair-select" onchange="changePair(this.value)">
+        {% for p in pairs %}
+        <option value="{{ p }}" {% if p == pair %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
+
+      <label style="margin-left: 12px;">Timeframe</label>
+      {% for tf in ['1m', '5m', '15m', '1h', '4h', '1d'] %}
+      <button class="tf-btn {% if tf == timeframe %}active{% endif %}"
+              onclick="changeTimeframe('{{ tf }}')">{{ tf }}</button>
+      {% endfor %}
+    </div>
+    <div id="live-chart"></div>
+  </div>
+
+  <!-- Score Panel -->
+  <div class="score-panel">
+    <div class="score-card">
+      <h4>Sentiment Score</h4>
+      <div class="gauge-bar">
+        <div class="gauge-fill sentiment" id="sentiment-bar" style="width: 0%;"></div>
+      </div>
+      <div class="gauge-value" id="sentiment-value">--</div>
+    </div>
+
+    <div class="score-card">
+      <h4>Whale Score</h4>
+      <div class="gauge-bar">
+        <div class="gauge-fill whale" id="whale-bar" style="width: 0%;"></div>
+      </div>
+      <div class="gauge-value" id="whale-value">--</div>
+    </div>
+
+    <div class="score-card">
+      <h4>Technical Score</h4>
+      <div class="gauge-bar">
+        <div class="gauge-fill technical" id="technical-bar" style="width: 0%;"></div>
+      </div>
+      <div class="gauge-value" id="technical-value">--</div>
+    </div>
+
+    <div class="score-card conviction-display">
+      <div class="conviction-number" id="conviction-number">--</div>
+      <div class="conviction-label">Combined Conviction</div>
+    </div>
+
+    <div class="score-card" style="text-align: center;">
+      <h4>Direction</h4>
+      <div class="direction-badge direction-neutral" id="direction-badge">NEUTRAL</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const currentPair = '{{ pair }}';
+  let currentTimeframe = '{{ timeframe | default("5m") }}';
+  const apiPair = currentPair.replace(/\//g, '-');
+
+  /* ── Navigation helpers ── */
+  window.changePair = function(pair) {
+    window.location.href = '/live/' + pair.replace(/\//g, '-');
+  };
+  window.changeTimeframe = function(tf) {
+    currentTimeframe = tf;
+    document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    loadOHLCV();
+  };
+
+  /* ── Chart setup ── */
+  const chartContainer = document.getElementById('live-chart');
+  if (!chartContainer || typeof LightweightCharts === 'undefined') return;
+
+  const chart = LightweightCharts.createChart(chartContainer, {
+    layout: {
+      background: { color: '#161b22' },
+      textColor: '#8b949e',
+    },
+    grid: {
+      vertLines: { color: '#21262d' },
+      horzLines: { color: '#21262d' },
+    },
+    width: chartContainer.clientWidth,
+    height: chartContainer.clientHeight || 500,
+    timeScale: {
+      borderColor: '#30363d',
+      timeVisible: true,
+      secondsVisible: false,
+    },
+    rightPriceScale: {
+      borderColor: '#30363d',
+    },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+    },
+  });
+
+  const candleSeries = chart.addCandlestickSeries({
+    upColor: '#3fb950',
+    downColor: '#f85149',
+    borderUpColor: '#3fb950',
+    borderDownColor: '#f85149',
+    wickUpColor: '#3fb950',
+    wickDownColor: '#f85149',
+  });
+
+  const volumeSeries = chart.addHistogramSeries({
+    priceFormat: { type: 'volume' },
+    priceScaleId: 'volume',
+  });
+
+  chart.priceScale('volume').applyOptions({
+    scaleMargins: { top: 0.8, bottom: 0 },
+  });
+
+  /* ── Fetch OHLCV Data ── */
+  function loadOHLCV() {
+    const url = '/api/ohlcv/' + apiPair + '?timeframe=' + currentTimeframe;
+    fetch(url)
+      .then(r => r.json())
+      .then(data => {
+        if (!data || !data.length) return;
+
+        // Use formatOHLCV from chart.js to convert [[ts,o,h,l,c,v],...] to chart format
+        const formatted = formatOHLCV(data);
+        candleSeries.setData(formatted.candles);
+        volumeSeries.setData(formatted.volumes);
+
+        chart.timeScale().fitContent();
+      })
+      .catch(err => console.error('Failed to load OHLCV:', err));
+  }
+
+  /* ── Fetch Trade Markers ── */
+  function loadMarkers() {
+    fetch('/api/trades?pair=' + encodeURIComponent(currentPair))
+      .then(r => r.json())
+      .then(trades => {
+        if (!trades || !trades.length) return;
+
+        const markers = [];
+        trades.forEach(t => {
+          const isLong = (t.direction || '') === 'long';
+          const entryTime = normaliseTime(t.opened_at);
+          markers.push({
+            time: entryTime,
+            position: isLong ? 'belowBar' : 'aboveBar',
+            color: isLong ? '#3fb950' : '#f85149',
+            shape: isLong ? 'arrowUp' : 'arrowDown',
+            text: (isLong ? 'L' : 'S') + ' $' + (t.entry_price || 0).toFixed(0),
+          });
+          if (t.closed_at) {
+            const exitTime = normaliseTime(t.closed_at);
+            markers.push({
+              time: exitTime,
+              position: isLong ? 'aboveBar' : 'belowBar',
+              color: (t.realized_pnl >= 0) ? '#3fb950' : '#f85149',
+              shape: 'circle',
+              text: 'Exit ' + (t.realized_pnl >= 0 ? '+' : '') + (t.realized_pnl || 0).toFixed(2),
+            });
+          }
+        });
+
+        markers.sort((a, b) => a.time - b.time);
+        candleSeries.setMarkers(markers);
+      })
+      .catch(err => console.error('Failed to load trade markers:', err));
+  }
+
+  /* ── Fetch Scores ── */
+  function loadScores() {
+    fetch('/api/signals?pair=' + encodeURIComponent(currentPair) + '&limit=1')
+      .then(r => r.json())
+      .then(signals => {
+        if (!signals || !signals.length) return;
+        const s = signals[0];
+
+        const sentiment = Math.round(s.sentiment_score || 0);
+        const whale = Math.round(s.whale_score || 0);
+        const technical = Math.round(s.technical_score || 0);
+        const conviction = s.conviction || 0;
+        const direction = (s.direction || 'neutral').toUpperCase();
+
+        document.getElementById('sentiment-bar').style.width = sentiment + '%';
+        document.getElementById('sentiment-value').textContent = sentiment;
+        document.getElementById('whale-bar').style.width = whale + '%';
+        document.getElementById('whale-value').textContent = whale;
+        document.getElementById('technical-bar').style.width = technical + '%';
+        document.getElementById('technical-value').textContent = technical;
+
+        const convNum = document.getElementById('conviction-number');
+        convNum.textContent = (conviction * 100).toFixed(1) + '%';
+        if (conviction >= 0.65) {
+          convNum.style.color = '#3fb950';
+        } else if (conviction >= 0.4) {
+          convNum.style.color = '#d29922';
+        } else {
+          convNum.style.color = '#f85149';
+        }
+
+        const badge = document.getElementById('direction-badge');
+        badge.textContent = direction;
+        badge.className = 'direction-badge direction-' + (s.direction || 'neutral');
+      })
+      .catch(err => console.error('Failed to load scores:', err));
+  }
+
+  /* ── Init and Poll ── */
+  loadOHLCV();
+  loadMarkers();
+  loadScores();
+
+  setInterval(function() {
+    loadOHLCV();
+    loadMarkers();
+    loadScores();
+  }, 30000);
+
+  /* ── Resize Handler ── */
+  window.addEventListener('resize', () => {
+    chart.applyOptions({
+      width: chartContainer.clientWidth,
+      height: chartContainer.clientHeight || 500,
+    });
+  });
+})();
+</script>
+{% endblock %}

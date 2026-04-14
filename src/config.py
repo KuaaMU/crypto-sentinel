@@ -1,8 +1,18 @@
+import urllib.request
 import yaml
 import os
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Any
+
+
+def _detect_proxy() -> str:
+    """Auto-detect system proxy (Clash/V2Ray etc). Env var PROXY_URL overrides."""
+    explicit = os.getenv("PROXY_URL", "")
+    if explicit:
+        return explicit
+    proxies = urllib.request.getproxies()
+    return proxies.get("https", proxies.get("http", ""))
 
 
 @dataclass(frozen=True)
@@ -13,6 +23,7 @@ class ExchangeConfig:
     api_key: str
     api_secret: str
     api_passphrase: str
+    proxy: str
 
 
 @dataclass(frozen=True)
@@ -50,6 +61,7 @@ class CollectorConfig:
     min_whale_tx_usd: float
     etherscan_api_key: str
     crypto_news_api_key: str
+    proxy: str
 
 
 @dataclass(frozen=True)
@@ -81,6 +93,8 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
         (lv["pct"], lv["target"]) for lv in exit_raw["partial_tp_levels"]
     )
 
+    proxy = _detect_proxy()
+
     return AppConfig(
         exchange=ExchangeConfig(
             name=exchange_raw["name"],
@@ -89,6 +103,7 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
             api_key=os.getenv("OKX_API_KEY", ""),
             api_secret=os.getenv("OKX_API_SECRET", ""),
             api_passphrase=os.getenv("OKX_API_PASSPHRASE", ""),
+            proxy=proxy,
         ),
         trading=TradingConfig(
             base_leverage=trading_raw["base_leverage"],
@@ -118,6 +133,7 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
             min_whale_tx_usd=coll_raw["min_whale_tx_usd"],
             etherscan_api_key=os.getenv("ETHERSCAN_API_KEY", ""),
             crypto_news_api_key=os.getenv("CRYPTO_NEWS_API_KEY", ""),
+            proxy=proxy,
         ),
         trading_mode=os.getenv("TRADING_MODE", "paper"),
     )

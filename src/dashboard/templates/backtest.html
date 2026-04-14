@@ -1,0 +1,436 @@
+{% extends "base.html" %}
+
+{% block title %}Backtest - Crypto Sentinel{% endblock %}
+
+{% block content %}
+<style>
+  .backtest-form {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 24px;
+    max-width: 700px;
+  }
+  .backtest-form h2 {
+    color: #58a6ff;
+    font-size: 20px;
+    margin-bottom: 20px;
+  }
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .slider-group {
+    margin-bottom: 16px;
+  }
+  .slider-group label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    color: #8b949e;
+    margin-bottom: 6px;
+  }
+  .slider-group label span {
+    color: #c9d1d9;
+    font-weight: 600;
+  }
+  .slider-group input[type="range"] {
+    width: 100%;
+    accent-color: #58a6ff;
+    cursor: pointer;
+  }
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .metric-card {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+  }
+  .metric-card h4 {
+    font-size: 11px;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+  .metric-card .metric-value {
+    font-size: 24px;
+    font-weight: 700;
+  }
+  .loading-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(13,17,23,0.8);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .loading-overlay.active { display: flex; }
+  .spinner {
+    width: 48px; height: 48px;
+    border: 4px solid #30363d;
+    border-top-color: #58a6ff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+
+{% if not backtest_result %}
+<!-- ── Config Form ── -->
+<div class="backtest-form">
+  <h2>Run Backtest</h2>
+  <form id="backtest-config">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Pair</label>
+        <select class="form-control" id="bt-pair">
+          {% for p in pairs %}
+          <option value="{{ p }}">{{ p }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Timeframe</label>
+        <select class="form-control" id="bt-timeframe">
+          <option value="5m">5m</option>
+          <option value="15m">15m</option>
+          <option value="1h" selected>1h</option>
+          <option value="4h">4h</option>
+          <option value="1d">1d</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Start Date</label>
+        <input type="date" class="form-control" id="bt-start">
+      </div>
+      <div class="form-group">
+        <label>End Date</label>
+        <input type="date" class="form-control" id="bt-end">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Initial Balance (USDT)</label>
+      <input type="number" class="form-control" id="bt-balance" value="10000" min="100" step="100">
+    </div>
+
+    <h3 style="color: #8b949e; font-size: 14px; margin: 20px 0 12px; text-transform: uppercase; letter-spacing: 0.5px;">
+      Scoring Weights
+    </h3>
+
+    <div class="slider-group">
+      <label>Sentiment Weight <span id="w-sentiment-val">0.40</span></label>
+      <input type="range" id="w-sentiment" min="0" max="1" step="0.05" value="0.40"
+             oninput="document.getElementById('w-sentiment-val').textContent = this.value">
+    </div>
+    <div class="slider-group">
+      <label>Whale Weight <span id="w-whale-val">0.35</span></label>
+      <input type="range" id="w-whale" min="0" max="1" step="0.05" value="0.35"
+             oninput="document.getElementById('w-whale-val').textContent = this.value">
+    </div>
+    <div class="slider-group">
+      <label>Technical Weight <span id="w-technical-val">0.25</span></label>
+      <input type="range" id="w-technical" min="0" max="1" step="0.05" value="0.25"
+             oninput="document.getElementById('w-technical-val').textContent = this.value">
+    </div>
+
+    <div class="slider-group">
+      <label>Entry Threshold <span id="entry-thresh-val">0.65</span></label>
+      <input type="range" id="entry-threshold" min="0.50" max="0.90" step="0.05" value="0.65"
+             oninput="document.getElementById('entry-thresh-val').textContent = this.value">
+    </div>
+
+    <button type="submit" class="btn btn-primary" style="margin-top: 8px; width: 100%;">
+      Run Backtest
+    </button>
+  </form>
+</div>
+
+<div class="loading-overlay" id="loading-overlay">
+  <div class="spinner"></div>
+  <div style="color: #8b949e; font-size: 14px;">Running backtest...</div>
+</div>
+
+{% else %}
+<!-- ── Backtest Results ── -->
+<h2 style="color: #58a6ff; margin-bottom: 20px;">
+  Backtest Results - {{ backtest_result.pair }} {{ backtest_result.timeframe }}
+</h2>
+
+<!-- Metrics Cards -->
+<div class="metrics-grid">
+  <div class="metric-card">
+    <h4>Return %</h4>
+    <div class="metric-value {{ 'positive' if backtest_result.return_pct >= 0 else 'negative' }}">
+      {{ '%.2f'|format(backtest_result.return_pct) }}%
+    </div>
+  </div>
+  <div class="metric-card">
+    <h4>Sharpe Ratio</h4>
+    <div class="metric-value {{ 'positive' if backtest_result.sharpe >= 1 else ('neutral' if backtest_result.sharpe >= 0 else 'negative') }}">
+      {{ '%.2f'|format(backtest_result.sharpe) }}
+    </div>
+  </div>
+  <div class="metric-card">
+    <h4>Max Drawdown</h4>
+    <div class="metric-value negative">
+      {{ '%.2f'|format(backtest_result.max_drawdown_pct) }}%
+    </div>
+  </div>
+  <div class="metric-card">
+    <h4>Win Rate</h4>
+    <div class="metric-value {{ 'positive' if backtest_result.win_rate >= 50 else 'negative' }}">
+      {{ '%.1f'|format(backtest_result.win_rate) }}%
+    </div>
+  </div>
+  <div class="metric-card">
+    <h4>Total Trades</h4>
+    <div class="metric-value">{{ backtest_result.total_trades }}</div>
+  </div>
+  <div class="metric-card">
+    <h4>Profit Factor</h4>
+    <div class="metric-value {{ 'positive' if backtest_result.profit_factor >= 1 else 'negative' }}">
+      {{ '%.2f'|format(backtest_result.profit_factor) }}
+    </div>
+  </div>
+</div>
+
+<!-- Equity Curve -->
+<div class="section">
+  <h2>Equity Curve</h2>
+  <div id="bt-equity-chart" style="height: 300px;"></div>
+</div>
+
+<!-- Price Chart with Markers -->
+<div class="section">
+  <h2>Price + Trades</h2>
+  <div id="bt-price-chart" style="height: 400px;"></div>
+</div>
+
+<!-- Trade Table -->
+<div class="section">
+  <h2>Trade Log</h2>
+  {% if backtest_result.trades %}
+  <div style="overflow-x: auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Direction</th>
+          <th>Entry Time</th>
+          <th>Entry Price</th>
+          <th>Exit Time</th>
+          <th>Exit Price</th>
+          <th>PnL</th>
+          <th>Exit Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in backtest_result.trades %}
+        <tr>
+          <td><span class="badge badge-{{ t.direction }}">{{ t.direction|upper }}</span></td>
+          <td>{{ t.entry_time[:19] if t.entry_time else '-' }}</td>
+          <td>{{ '%.4f'|format(t.entry_price) }}</td>
+          <td>{{ t.exit_time[:19] if t.exit_time else '-' }}</td>
+          <td>{{ '%.4f'|format(t.exit_price) if t.exit_price else '-' }}</td>
+          <td class="{{ 'positive' if t.pnl >= 0 else 'negative' }}">
+            {{ '%.2f'|format(t.pnl) }} USDT
+          </td>
+          <td>{{ t.exit_reason or '-' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty">No trades executed during backtest period</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if not backtest_result %}
+<!-- ── Form Submission Script ── -->
+<script>
+(function() {
+  const form = document.getElementById('backtest-config');
+  if (!form) return;
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const payload = {
+      pair: document.getElementById('bt-pair').value,
+      timeframe: document.getElementById('bt-timeframe').value,
+      start_date: document.getElementById('bt-start').value,
+      end_date: document.getElementById('bt-end').value,
+      initial_balance: parseFloat(document.getElementById('bt-balance').value),
+      weights: {
+        sentiment: parseFloat(document.getElementById('w-sentiment').value),
+        whale: parseFloat(document.getElementById('w-whale').value),
+        technical: parseFloat(document.getElementById('w-technical').value),
+      },
+      entry_threshold: parseFloat(document.getElementById('entry-threshold').value),
+    };
+
+    if (!payload.start_date || !payload.end_date) {
+      alert('Please select start and end dates.');
+      return;
+    }
+
+    document.getElementById('loading-overlay').classList.add('active');
+
+    fetch('/api/backtest/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(r => {
+        if (!r.ok) throw new Error('Backtest failed: ' + r.status);
+        return r.json();
+      })
+      .then(result => {
+        if (result.id) {
+          window.location.href = '/backtest/' + result.id;
+        } else {
+          window.location.reload();
+        }
+      })
+      .catch(err => {
+        document.getElementById('loading-overlay').classList.remove('active');
+        alert('Backtest failed: ' + err.message);
+      });
+  });
+})();
+</script>
+
+{% else %}
+<!-- ── Result Charts Script ── -->
+<script>
+(function() {
+  if (typeof LightweightCharts === 'undefined') return;
+
+  const chartOptions = {
+    layout: {
+      background: { color: '#161b22' },
+      textColor: '#8b949e',
+    },
+    grid: {
+      vertLines: { color: '#21262d' },
+      horzLines: { color: '#21262d' },
+    },
+    timeScale: {
+      borderColor: '#30363d',
+      timeVisible: true,
+    },
+    rightPriceScale: { borderColor: '#30363d' },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+  };
+
+  /* ── Equity Curve ── */
+  const eqContainer = document.getElementById('bt-equity-chart');
+  if (eqContainer) {
+    const eqChart = LightweightCharts.createChart(eqContainer, {
+      ...chartOptions,
+      width: eqContainer.clientWidth,
+      height: 300,
+    });
+
+    const eqLine = eqChart.addLineSeries({
+      color: '#58a6ff',
+      lineWidth: 2,
+    });
+
+    const equityData = {{ backtest_result.equity_curve | tojson | safe }};
+    if (equityData && equityData.length) {
+      eqLine.setData(equityData);
+      eqChart.timeScale().fitContent();
+    }
+
+    window.addEventListener('resize', () => {
+      eqChart.applyOptions({ width: eqContainer.clientWidth });
+    });
+  }
+
+  /* ── Price Chart with Trade Markers ── */
+  const priceContainer = document.getElementById('bt-price-chart');
+  if (priceContainer) {
+    const prChart = LightweightCharts.createChart(priceContainer, {
+      ...chartOptions,
+      width: priceContainer.clientWidth,
+      height: 400,
+    });
+
+    const candleSeries = prChart.addCandlestickSeries({
+      upColor: '#3fb950',
+      downColor: '#f85149',
+      borderUpColor: '#3fb950',
+      borderDownColor: '#f85149',
+      wickUpColor: '#3fb950',
+      wickDownColor: '#f85149',
+    });
+
+    const ohlcvData = {{ backtest_result.ohlcv | tojson | safe }};
+    if (ohlcvData && ohlcvData.length) {
+      candleSeries.setData(ohlcvData);
+    }
+
+    /* Trade markers */
+    const tradeData = {{ backtest_result.trades | tojson | safe }};
+    if (tradeData && tradeData.length) {
+      const markers = [];
+      tradeData.forEach(function(t) {
+        if (t.entry_time) {
+          markers.push({
+            time: t.entry_time_ts || t.entry_time,
+            position: t.direction === 'long' ? 'belowBar' : 'aboveBar',
+            color: t.direction === 'long' ? '#3fb950' : '#f85149',
+            shape: t.direction === 'long' ? 'arrowUp' : 'arrowDown',
+            text: 'Entry',
+          });
+        }
+        if (t.exit_time) {
+          markers.push({
+            time: t.exit_time_ts || t.exit_time,
+            position: t.direction === 'long' ? 'aboveBar' : 'belowBar',
+            color: '#d29922',
+            shape: 'circle',
+            text: 'Exit',
+          });
+        }
+      });
+
+      markers.sort(function(a, b) {
+        if (a.time < b.time) return -1;
+        if (a.time > b.time) return 1;
+        return 0;
+      });
+
+      candleSeries.setMarkers(markers);
+    }
+
+    prChart.timeScale().fitContent();
+
+    window.addEventListener('resize', () => {
+      prChart.applyOptions({ width: priceContainer.clientWidth });
+    });
+  }
+})();
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Signals - Crypto Sentinel{% endblock %}
+
+{% block content %}
+<style>
+  .score-bar-cell {
+    min-width: 120px;
+  }
+  .score-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .score-bar-track {
+    flex: 1;
+    height: 6px;
+    background: #21262d;
+    border-radius: 3px;
+    overflow: hidden;
+    min-width: 60px;
+  }
+  .score-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+  .score-bar-fill.sentiment {
+    background: linear-gradient(90deg, #f85149, #d29922, #3fb950);
+  }
+  .score-bar-fill.whale {
+    background: linear-gradient(90deg, #f85149, #d29922, #58a6ff);
+  }
+  .score-bar-fill.technical {
+    background: linear-gradient(90deg, #f85149, #d29922, #a371f7);
+  }
+  .score-bar-value {
+    font-size: 12px;
+    font-weight: 600;
+    color: #8b949e;
+    min-width: 28px;
+    text-align: right;
+  }
+  .conviction-text {
+    font-weight: 700;
+    font-size: 13px;
+  }
+</style>
+
+<h2 style="color: #58a6ff; margin-bottom: 20px;">Signal Log</h2>
+
+<!-- Filter Bar -->
+<div class="filter-bar">
+  <label>Pair</label>
+  <select id="filter-pair" onchange="applyFilters()">
+    <option value="">All Pairs</option>
+    {% for p in pairs %}
+    <option value="{{ p }}" {% if request.args.get('pair') == p %}selected{% endif %}>{{ p }}</option>
+    {% endfor %}
+  </select>
+
+  <label>Direction</label>
+  <select id="filter-direction" onchange="applyFilters()">
+    <option value="">All</option>
+    <option value="long" {% if request.args.get('direction') == 'long' %}selected{% endif %}>Long</option>
+    <option value="short" {% if request.args.get('direction') == 'short' %}selected{% endif %}>Short</option>
+    <option value="neutral" {% if request.args.get('direction') == 'neutral' %}selected{% endif %}>Neutral</option>
+  </select>
+</div>
+
+<!-- Signals Table -->
+<div class="section">
+  {% if signals %}
+  <div style="overflow-x: auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Pair</th>
+          <th>Direction</th>
+          <th>Action</th>
+          <th class="score-bar-cell">Sentiment</th>
+          <th class="score-bar-cell">Whale</th>
+          <th class="score-bar-cell">Technical</th>
+          <th>Conviction</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in signals %}
+        <tr>
+          <td>{{ s.timestamp[:19] }}</td>
+          <td><strong>{{ s.pair }}</strong></td>
+          <td><span class="badge badge-{{ s.direction }}">{{ s.direction|upper }}</span></td>
+          <td><span class="badge badge-{{ s.action }}">{{ s.action }}</span></td>
+          <td class="score-bar-cell">
+            <div class="score-bar">
+              <div class="score-bar-track">
+                <div class="score-bar-fill sentiment" style="width: {{ s.sentiment_score }}%;"></div>
+              </div>
+              <span class="score-bar-value">{{ '%.0f'|format(s.sentiment_score) }}</span>
+            </div>
+          </td>
+          <td class="score-bar-cell">
+            <div class="score-bar">
+              <div class="score-bar-track">
+                <div class="score-bar-fill whale" style="width: {{ s.whale_score }}%;"></div>
+              </div>
+              <span class="score-bar-value">{{ '%.0f'|format(s.whale_score) }}</span>
+            </div>
+          </td>
+          <td class="score-bar-cell">
+            <div class="score-bar">
+              <div class="score-bar-track">
+                <div class="score-bar-fill technical" style="width: {{ s.technical_score }}%;"></div>
+              </div>
+              <span class="score-bar-value">{{ '%.0f'|format(s.technical_score) }}</span>
+            </div>
+          </td>
+          <td>
+            <span class="conviction-text {{ 'positive' if s.conviction >= 0.65 else ('neutral' if s.conviction >= 0.4 else 'negative') }}">
+              {{ '%.1f'|format(s.conviction * 100) }}%
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty">No signals recorded yet. Start the trading engine to generate signals.</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function applyFilters() {
+  const pair = document.getElementById('filter-pair').value;
+  const direction = document.getElementById('filter-direction').value;
+
+  const params = new URLSearchParams();
+  if (pair) params.set('pair', pair);
+  if (direction) params.set('direction', direction);
+
+  const qs = params.toString();
+  window.location.href = '/signals' + (qs ? '?' + qs : '');
+}
+</script>
+{% endblock %}
